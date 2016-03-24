@@ -151,8 +151,10 @@ static const PROGMEM uint8_t font_5x7[95][6] = {
 static uint8_t display_buff[256];
 static uint8_t temp_buff[256];
 
-static const uint8_t DISPLAY_BUFF_START = 112;
-static const uint8_t DISPLAY_BUFF_END = 143;
+static const uint8_t DISPLAY_BUFF_START = 0;
+static const uint8_t DISPLAY_BUFF_END = 31;
+
+static uint8_t buff_end = 0;
 
 
 //*********************************************************************
@@ -181,74 +183,79 @@ void get_5x7_character(char c, uint8_t *char_buff)
 void print_char(Max7219 *p_display, uint8_t position99, char c)
 {
     uint8_t idx;
-    uint8_t wrap_device;
-    uint8_t wrap_idx;
     uint8_t char_buff[6];
     uint8_t device;
-    uint8_t display_buff_idx = 0;
+    uint8_t wrap_device;
+    uint8_t wrap_idx;
+    uint8_t buff_start = position99;
     
     get_5x7_character(c, char_buff);
-    
-    //get device and device_position
-    if(position99 > 8)
+
+    if(position99 < 33)
     {
-        if(position99%8)
-        {
-            device = ((position99/8) + 1);
-            position99 = position99%8;
-        }
-        else
-        {
-            device = position99/8;
-            position99 = 8;
-        }
+      //get device and device_position
+      if(position99 > 8)
+      {
+          if(position99%8)
+          {
+              device = ((position99/8) + 1);
+              position99 = position99%8;
+          }
+          else
+          {
+              device = position99/8;
+              position99 = 8;
+          }
+      }
+      else
+      {
+          device = 1;
+      }
+
+      //check for dispaly wrap around 
+      //(moving to next 8x8 grid cause character doesn't fit on current one)
+      if(position99 > 3)
+      {
+          wrap_idx = (9 - position99);
+          if(device < 4)
+          {
+              wrap_device = (device + 1);
+          }
+          else
+          {
+              wrap_device = 1;
+          }
+      }
+      else
+      {
+          wrap_idx = 6; //make bigger than idx, not used
+          wrap_device = 0; //not used
+      }
+
+      //print character to position
+      for(idx = 0; idx < 6; idx++)
+      {
+          //check for wrap
+          if((idx >= wrap_idx)  && (device != 4))
+          {
+              p_display->write_digit(wrap_device, ((idx - wrap_idx) + 1), char_buff[idx]);
+          }
+          else
+          {
+              p_display->write_digit(device, (position99 + idx), char_buff[idx]);
+          }
+
+          buff_end = ((buff_start - 1) + idx);
+          display_buff[buff_end] = char_buff[idx];
+      }
     }
     else
     {
-        device = 1;
-    }
-    
-    //check for dispaly wrap around 
-    //(moving to next 8x8 grid cause character doesn't fit on current one)
-    if(position99 > 3)
-    {
-        wrap_idx = (9 - position99);
-        if(device < 4)
-        {
-            wrap_device = (device + 1);
-        }
-        else
-        {
-            wrap_device = 1;
-        }
-    }
-    else
-    {
-        wrap_idx = 6; //make bigger than idx, not used
-        wrap_device = 0; //not used
-    }
-    
-    //print character to position
-    for(idx = 0; idx < 6; idx++)
-    {
-        //check for wrap
-        if(idx >= wrap_idx)
-        {
-            p_display->write_digit(wrap_device, ((idx - wrap_idx) + 1), char_buff[idx]);
-        }
-        else
-        {
-            p_display->write_digit(device, (position99 + idx), char_buff[idx]);
-        }
-        
-        //get index for display buffer, keeps image of display for shifting
-        display_buff_idx = (((device - 1) * 8) + (position99 - 1) + idx + DISPLAY_BUFF_START);
-        //wrap buff back around 
-        if(display_buff_idx > 255)
-        {
-            display_buff_idx = display_buff_idx - 256;
-        }
-        display_buff[display_buff_idx] = char_buff[idx];
+      for(idx = 0; idx < 6; idx++)
+      {
+        buff_end = ((buff_start - 1) + idx);
+        display_buff[buff_end] = char_buff[idx];
+      }
     }
 }
 
@@ -260,8 +267,8 @@ void print_string(Max7219 *p_display, uint8_t position99, const char *s)
     
     while(s[idx] != '\0')
     {
-        print_char(p_display, (position99 + (idx*6)), s[idx]);
-        idx++;
+      print_char(p_display, position99 + (idx*6), s[idx]);
+      idx++;
     } 
 }
 
@@ -274,9 +281,9 @@ void shift_display_right(Max7219 *p_display, uint8_t count, uint8_t ms_delay)
     
     for(idx = 0; idx < count; idx++)
     {
-        for(idy = 0; idy < 256; idy++)
+        for(idy = 0; idy < (buff_end + 1); idy++)
         {
-            if(idy == 255)
+            if(idy == buff_end)
             {
                 temp_buff[0] = display_buff[idy];
             }
@@ -286,7 +293,7 @@ void shift_display_right(Max7219 *p_display, uint8_t count, uint8_t ms_delay)
             }
         }
         
-        for(idy = 0; idy < 256; idy++)
+        for(idy = 0; idy < (buff_end + 1); idy++)
         {
             //save shifted display in buffer
             display_buff[idy] = temp_buff[idy];
@@ -336,7 +343,7 @@ void shift_display_right(Max7219 *p_display, uint8_t count, uint8_t ms_delay)
                 }
             }
         }
-        
+
         delay(ms_delay);
     }
 }
@@ -349,11 +356,11 @@ void shift_display_left(Max7219 *p_display, uint8_t count, uint8_t ms_delay)
     
     for(idx = 0; idx < count; idx++)
     {
-        for(idy = 0; idy < 256; idy++)
+        for(idy = 0; idy < (buff_end + 1); idy++)
         {
             if(idy == 0)
             {
-                temp_buff[255] = display_buff[idy];
+                temp_buff[buff_end] = display_buff[idy];
             }
             else
             {
@@ -361,7 +368,7 @@ void shift_display_left(Max7219 *p_display, uint8_t count, uint8_t ms_delay)
             }
         }
         
-        for(idy = 0; idy < 256; idy++)
+        for(idy = 0; idy < (buff_end + 1); idy++)
         {
             //save shifted display in buffer
             display_buff[idy] = temp_buff[idy];
@@ -411,7 +418,7 @@ void shift_display_left(Max7219 *p_display, uint8_t count, uint8_t ms_delay)
                 }
             }
         }
-        
+
         delay(ms_delay);
     }
 }
@@ -433,6 +440,11 @@ void quad_all_on(Max7219 *p_display, uint8_t quad)
         {
             display_buff[idx + DISPLAY_BUFF_START] = 0xFF;
         }
+    }
+
+    if(buff_end < (quad * 8))
+    {
+      buff_end = (quad * 8);
     }
     
     p_display->device_all_on(quad);
@@ -456,6 +468,13 @@ void quad_all_off(Max7219 *p_display, uint8_t quad)
             display_buff[idx + DISPLAY_BUFF_START] = 0;
         }
     }
+
+    //is buff_end in the quad?
+    if((((quad - 1) * 8) < buff_end) && ((quad * 8) > buff_end))
+    {
+      buff_end = ((quad - 1) * 8);
+    }
+    //leave it alone otherwise
     
     p_display->device_all_off(quad);
 }
@@ -464,9 +483,14 @@ void quad_all_off(Max7219 *p_display, uint8_t quad)
 //*********************************************************************
 void all_on(Max7219 *p_display)
 {
-    for(uint16_t idx = 0; idx < 256; idx++)
+    for(uint16_t idx = 0; idx < 32; idx++)
     {
         display_buff[idx] = 0xFF;
+    }
+
+    if(buff_end < 32)
+    {
+      buff_end = 32;
     }
     
     p_display->display_all_on();
@@ -476,9 +500,14 @@ void all_on(Max7219 *p_display)
 //*********************************************************************
 void all_off(Max7219 *p_display)
 {
-    for(uint16_t idx = 0; idx < 256; idx++)
+    for(uint16_t idx = 0; idx < 32; idx++)
     {
         display_buff[idx] = 0;
+    }
+
+    if(buff_end < 32)
+    {
+      buff_end = 0;
     }
     
     p_display->display_all_off();
@@ -562,4 +591,5 @@ void endless_scroll_display(Max7219 *p_display, uint32_t scroll_right)
         }
     }
 }
+
 
