@@ -45,7 +45,7 @@ uint16_t idz;
  
 void setup() 
 {
-  Serial.begin(115200);
+  Serial.begin(9600);
   led_display.begin(11, 13, 10);
 
   display_config.decode_mode = 0;

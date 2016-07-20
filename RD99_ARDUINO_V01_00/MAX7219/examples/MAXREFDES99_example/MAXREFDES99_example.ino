@@ -42,7 +42,7 @@ Max7219 display99;
 
 void setup() 
 {
-  Serial.begin(115200);
+  Serial.begin(9600);
   Serial.setTimeout(5000);
   
   display99.begin(11, 13, 10);
